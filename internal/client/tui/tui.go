@@ -2,126 +2,126 @@ package tui
 
 import (
 	"fmt"
-	"strings"
+	"log"
 
 	"spacecraftsim/internal/client/core"
 
-	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
-// UI represents the TUI application
+// UI represents the terminal user interface
 type UI struct {
-	app        *tview.Application
-	deviceList *tview.List
-	logView    *tview.TextView
-	inputField *tview.InputField
-	logger     *core.Logger
-	conn       *core.Connection
+	app      *tview.Application
+	conn     *core.Connection
+	logger   *core.Logger
+	controls []Control
+	grid     *tview.Grid
+	logView  *tview.TextView
 }
 
-// New creates a new TUI instance
+// New creates a new UI instance
 func New(conn *core.Connection, logger *core.Logger) *UI {
 	ui := &UI{
-		app:    tview.NewApplication(),
-		logger: logger,
-		conn:   conn,
+		app:     tview.NewApplication(),
+		conn:    conn,
+		logger:  logger,
+		grid:    tview.NewGrid(),
+		logView: tview.NewTextView().SetDynamicColors(true),
 	}
 
-	// Create the device list
-	ui.deviceList = tview.NewList()
-	ui.deviceList.ShowSecondaryText(false)
-	ui.deviceList.SetBorder(true).
-		SetTitle("Devices")
+	// Load device configuration
+	config, err := LoadConfig("devices.yaml")
+	if err != nil {
+		log.Printf("Warning: Failed to load device config: %v", err)
+		config = &Config{} // Use empty config as fallback
+	}
 
-	// Create the log view
-	ui.logView = tview.NewTextView()
-	ui.logView.SetDynamicColors(true).
-		SetRegions(true).
-		SetWordWrap(true)
-	ui.logView.SetBorder(true).
-		SetTitle("Log")
+	// Create controls from config
+	ui.createControls(config)
 
-	// Create the input field
-	ui.inputField = tview.NewInputField()
-	ui.inputField.SetLabel("Input: ")
-	ui.inputField.SetBorder(true).
-		SetTitle("Message")
+	// Set up grid layout
+	ui.setupLayout()
 
-	// Add some example devices (replace with actual device list)
-	ui.deviceList.AddItem("logger1", "", 0, nil)
-	ui.deviceList.AddItem("temp1", "", 0, nil)
-	ui.deviceList.AddItem("press1", "", 0, nil)
-
-	// Set up the layout
-	grid := tview.NewGrid().
-		SetRows(0, 3).
-		SetColumns(30, 0).
-		AddItem(ui.deviceList, 0, 0, 1, 1, 0, 0, true).
-		AddItem(ui.logView, 0, 1, 1, 1, 0, 0, false).
-		AddItem(ui.inputField, 1, 0, 1, 2, 0, 0, false)
-
-	// Set up input handling
-	ui.setupInputHandling()
-
-	ui.app.SetRoot(grid, true)
 	return ui
 }
 
-// setupInputHandling configures the input handling for the UI
-func (ui *UI) setupInputHandling() {
-	// Handle input field submission
-	ui.inputField.SetDoneFunc(func(key tcell.Key) {
-		if key == tcell.KeyEnter {
-			input := ui.inputField.GetText()
-			if input == "" {
-				return
-			}
+// createControls creates UI controls from configuration
+func (ui *UI) createControls(config *Config) {
+	for _, dev := range config.Devices {
+		var control Control
 
-			// Get selected device
-			_, deviceID := ui.deviceList.GetItemText(ui.deviceList.GetCurrentItem())
-			values := strings.Fields(input)
+		switch dev.Type {
+		case TypeCheckbox:
+			control = NewCheckboxControl(dev.ID, dev.Label, func(checked bool) {
+				ui.handleControlChange(dev.ID, fmt.Sprintf("%v", checked))
+			})
 
-			// Send the message
-			if err := core.SendMessage(ui.conn, deviceID, values); err != nil {
-				ui.logger.LogError("Failed to send message: %v", err)
-			} else {
-				ui.logger.LogSuccess("Sent message to %s: %s", deviceID, input)
-			}
+		case TypeSelector:
+			control = NewSelectorControl(dev.ID, dev.Label, dev.Options, func(option string, index int) {
+				ui.handleControlChange(dev.ID, option)
+			})
 
-			// Clear the input field
-			ui.inputField.SetText("")
+		case TypeInput:
+			control = NewInputControl(dev.ID, dev.Label, func(text string) {
+				ui.handleControlChange(dev.ID, text)
+			})
+
+		default:
+			log.Printf("Warning: Unknown device type %s for device %s", dev.Type, dev.ID)
+			continue
 		}
-	})
 
-	// Set up keyboard navigation
-	ui.app.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		switch event.Key() {
-		case tcell.KeyTab:
-			// Switch focus between components
-			switch ui.app.GetFocus() {
-			case ui.deviceList:
-				ui.app.SetFocus(ui.inputField)
-			case ui.inputField:
-				ui.app.SetFocus(ui.deviceList)
-			}
-			return nil
-		case tcell.KeyEsc:
-			ui.app.Stop()
-			return nil
-		}
-		return event
-	})
+		ui.controls = append(ui.controls, control)
+	}
 }
 
-// Run starts the TUI application
+// setupLayout sets up the UI layout
+func (ui *UI) setupLayout() {
+	// Create a form for controls
+	form := tview.NewForm()
+	for _, control := range ui.controls {
+		form.AddFormItem(control.GetPrimitive())
+	}
+
+	// Set up grid layout
+	ui.grid.SetRows(0, 10)
+	ui.grid.SetColumns(0)
+	ui.grid.AddItem(form, 0, 0, 1, 1, 0, 0, true)
+	ui.grid.AddItem(ui.logView, 1, 0, 1, 1, 0, 0, false)
+
+	// Set up log view
+	ui.logView.SetBorder(true).SetTitle("Log")
+	ui.logger.SetOutput(ui.logView)
+}
+
+// handleControlChange handles control value changes
+func (ui *UI) handleControlChange(id, value string) {
+	msg := core.Message{
+		ID:     id,
+		Values: []string{value},
+	}
+	if err := ui.conn.SendMessage(msg); err != nil {
+		ui.logger.Log("Error", fmt.Sprintf("Failed to send message: %v", err))
+	} else {
+		ui.logger.Log("Info", fmt.Sprintf("Sent: %s = %s", id, value))
+	}
+}
+
+// Run starts the UI
 func (ui *UI) Run() error {
-	return ui.app.Run()
-}
+	// Set up message handler
+	ui.conn.SetMessageHandler(func(msg core.Message) {
+		// Update control values based on received messages
+		for _, control := range ui.controls {
+			if control.GetID() == msg.ID && len(msg.Values) > 0 {
+				ui.app.QueueUpdateDraw(func() {
+					control.SetValue(msg.Values[0])
+				})
+			}
+		}
+		ui.logger.Log("Received", fmt.Sprintf("%s = %v", msg.ID, msg.Values))
+	})
 
-// Log writes a message to the log view
-func (ui *UI) Log(level core.LogLevel, format string, args ...interface{}) {
-	message := fmt.Sprintf(format, args...)
-	ui.logView.Write([]byte(message + "\n"))
-	ui.logView.ScrollToEnd()
+	// Start the application
+	return ui.app.SetRoot(ui.grid, true).Run()
 }

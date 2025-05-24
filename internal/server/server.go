@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -99,6 +100,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		messages, err := s.parser.ParseBatch(strings.NewReader(line))
 		if err != nil {
 			log.Printf("Error parsing message: %v", err)
+			resp := parser.ResponseMessage{
+				Type:  "error",
+				Error: fmt.Sprintf("Failed to parse message: %v", err),
+			}
+			if err := json.NewEncoder(conn).Encode(resp); err != nil {
+				log.Printf("Error sending error response: %v", err)
+			}
 			continue
 		}
 
@@ -115,6 +123,24 @@ func (s *Server) handleConnection(conn net.Conn) {
 			// Route message to appropriate device
 			if err := s.ship.HandleMessage(devMsg); err != nil {
 				log.Printf("Error handling message: %v", err)
+				resp := parser.ResponseMessage{
+					Type:  "error",
+					ID:    msg.ID,
+					Error: fmt.Sprintf("Failed to handle message: %v", err),
+				}
+				if err := json.NewEncoder(conn).Encode(resp); err != nil {
+					log.Printf("Error sending error response: %v", err)
+				}
+			} else {
+				// Send success response
+				resp := parser.ResponseMessage{
+					Type:   "success",
+					ID:     msg.ID,
+					Values: msg.Values,
+				}
+				if err := json.NewEncoder(conn).Encode(resp); err != nil {
+					log.Printf("Error sending success response: %v", err)
+				}
 			}
 		}
 	}

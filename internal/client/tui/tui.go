@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"spacecraftsim/internal/client/core"
+	"spacecraftsim/internal/parser"
 
 	"github.com/rivo/tview"
 )
@@ -44,34 +45,63 @@ func New(conn *core.Connection, logger *core.Logger) *UI {
 	// Set up grid layout
 	ui.setupLayout()
 
+	// Set up message handler
+	ui.conn.SetMessageHandler(func(msg core.Message) {
+		// Update control values based on received messages
+		for _, control := range ui.controls {
+			if control.GetID() == msg.ID && len(msg.Values) > 0 {
+				ui.app.QueueUpdateDraw(func() {
+					if strValue, ok := msg.Values[0].(string); ok {
+						control.SetValue(strValue)
+					}
+				})
+			}
+		}
+		ui.logger.Log(core.LevelInfo, fmt.Sprintf("%s = %v", msg.ID, msg.Values))
+	})
+
+	// Set up response handler
+	ui.conn.SetResponseHandler(func(resp parser.ResponseMessage) {
+		if resp.Type == "error" {
+			ui.app.QueueUpdateDraw(func() {
+				ui.logger.Log(core.LevelError, fmt.Sprintf("Error from server: %s", resp.Error))
+			})
+		}
+	})
+
 	return ui
+}
+
+// Run starts the UI
+func (ui *UI) Run() error {
+	return ui.app.SetRoot(ui.grid, true).Run()
 }
 
 // createControls creates UI controls from configuration
 func (ui *UI) createControls(config *Config) {
 	for _, dev := range config.Devices {
-		// Create a new variable for each iteration to avoid closure issues
-		device := dev
+		// Create local copy of device ID to avoid closure issues
+		deviceID := dev.ID
 		var control Control
 
-		switch device.Type {
+		switch dev.Type {
 		case TypeCheckbox:
-			control = NewCheckboxControl(device.ID, device.Label, func(checked bool) {
-				ui.handleControlChange(device.ID, fmt.Sprintf("%v", checked))
+			control = NewCheckboxControl(deviceID, dev.Label, func(checked bool) {
+				ui.handleControlChange(deviceID, fmt.Sprintf("%v", checked))
 			})
 
 		case TypeSelector:
-			control = NewSelectorControl(device.ID, device.Label, device.Options, func(option string, index int) {
-				ui.handleControlChange(device.ID, option)
+			control = NewSelectorControl(deviceID, dev.Label, dev.Options, func(option string, index int) {
+				ui.handleControlChange(deviceID, option)
 			})
 
 		case TypeInput:
-			control = NewInputControl(device.ID, device.Label, func(text string) {
-				ui.handleControlChange(device.ID, text)
+			control = NewInputControl(deviceID, dev.Label, func(text string) {
+				ui.handleControlChange(deviceID, text)
 			})
 
 		default:
-			log.Printf("Warning: Unknown device type %s for device %s", device.Type, device.ID)
+			log.Printf("Warning: Unknown device type %s for device %s", dev.Type, deviceID)
 			continue
 		}
 
@@ -109,25 +139,4 @@ func (ui *UI) handleControlChange(id, value string) {
 	} else {
 		ui.logger.Log(core.LevelInfo, fmt.Sprintf("Sent: %s = %s", id, value))
 	}
-}
-
-// Run starts the UI
-func (ui *UI) Run() error {
-	// Set up message handler
-	ui.conn.SetMessageHandler(func(msg core.Message) {
-		// Update control values based on received messages
-		for _, control := range ui.controls {
-			if control.GetID() == msg.ID && len(msg.Values) > 0 {
-				ui.app.QueueUpdateDraw(func() {
-					if strValue, ok := msg.Values[0].(string); ok {
-						control.SetValue(strValue)
-					}
-				})
-			}
-		}
-		ui.logger.Log(core.LevelInfo, fmt.Sprintf("%s = %v", msg.ID, msg.Values))
-	})
-
-	// Start the application
-	return ui.app.SetRoot(ui.grid, true).Run()
 }

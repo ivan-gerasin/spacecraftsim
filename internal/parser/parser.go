@@ -15,6 +15,14 @@ type Message struct {
 	Values []interface{} `json:"values"`
 }
 
+// ResponseMessage represents a server response
+type ResponseMessage struct {
+	Type   string      `json:"type"`   // "error" or "success"
+	ID     string      `json:"id"`     // Original message ID
+	Error  string      `json:"error"`  // Error message if any
+	Values interface{} `json:"values"` // Response values if any
+}
+
 // MessageParser defines the interface for parsing messages
 type MessageParser interface {
 	// ParseBatch reads and parses a batch of messages from the reader

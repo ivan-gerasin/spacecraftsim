@@ -5,13 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"spacecraftsim/internal/parser"
 	"time"
 )
 
 // Connection represents a TCP connection to the server
 type Connection struct {
-	conn           net.Conn
-	messageHandler func(Message)
+	conn            net.Conn
+	messageHandler  func(Message)
+	responseHandler func(parser.ResponseMessage)
 }
 
 // NewConnection creates a new connection to the server
@@ -31,6 +33,11 @@ func (c *Connection) SetMessageHandler(handler func(Message)) {
 	c.messageHandler = handler
 }
 
+// SetResponseHandler sets the handler for server responses
+func (c *Connection) SetResponseHandler(handler func(parser.ResponseMessage)) {
+	c.responseHandler = handler
+}
+
 // SendMessage sends a message to the server
 func (c *Connection) SendMessage(msg Message) error {
 	data, err := json.Marshal([]Message{msg})
@@ -47,6 +54,16 @@ func (c *Connection) SendMessage(msg Message) error {
 func (c *Connection) readMessages() {
 	scanner := bufio.NewScanner(c.conn)
 	for scanner.Scan() {
+		// Try to parse as response first
+		var resp parser.ResponseMessage
+		if err := json.Unmarshal(scanner.Bytes(), &resp); err == nil {
+			if c.responseHandler != nil {
+				c.responseHandler(resp)
+			}
+			continue
+		}
+
+		// If not a response, try to parse as message
 		var messages []Message
 		if err := json.Unmarshal(scanner.Bytes(), &messages); err != nil {
 			continue // Skip invalid messages

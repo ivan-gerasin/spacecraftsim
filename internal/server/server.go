@@ -6,9 +6,11 @@ import (
 	"log"
 	"net"
 	"os"
-	"spacecraftsim/internal/commands"
+	"spacecraftsim/internal/device"
 	"spacecraftsim/internal/parser"
+	"spacecraftsim/internal/ship"
 	"strings"
+	"time"
 )
 
 // Server represents a TCP server
@@ -16,16 +18,39 @@ type Server struct {
 	address  string
 	listener net.Listener
 	parser   parser.MessageParser
-	commands *commands.CommandRegistry
+	ship     *ship.Ship
 }
 
 // New creates a new Server instance
 func New(address string) *Server {
-	return &Server{
-		address:  address,
-		parser:   &parser.JSONParser{},
-		commands: commands.NewCommandRegistry(),
+	s := &Server{
+		address: address,
+		parser:  &parser.JSONParser{},
+		ship:    ship.New(),
 	}
+
+	// Register some example devices
+	s.registerDevices()
+
+	return s
+}
+
+// registerDevices adds some example devices to the ship
+func (s *Server) registerDevices() {
+	// Create an example device
+	logger := device.NewLogger("logger1")
+	echo1 := device.NewEcho("echo1")
+
+	// Register the devices
+	if err := s.ship.RegisterDevice(logger); err != nil {
+		log.Printf("Error registering logger: %v", err)
+	}
+	if err := s.ship.RegisterDevice(echo1); err != nil {
+		log.Printf("Error registering echo1: %v", err)
+	}
+
+	// Start the ship
+	s.ship.Start()
 }
 
 // Start begins listening for connections
@@ -62,6 +87,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 		// Check for special commands
 		if line == "__kill__" {
 			log.Printf("Received kill command from %s", conn.RemoteAddr())
+			s.ship.Stop()
 			os.Exit(0)
 		}
 
@@ -78,12 +104,18 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		// Process the messages
 		for _, msg := range messages {
-			// Format values with labels
-			parts := []string{fmt.Sprintf("ID: %s", msg.ID)}
-			for i, v := range msg.Values {
-				parts = append(parts, fmt.Sprintf("VAL%d: %v", i+1, v))
+			// Convert parser message to device message
+			devMsg := device.Message{
+				ID:     msg.ID,
+				Values: msg.Values,
+				Time:   time.Now(),
+				Source: conn.RemoteAddr().String(),
 			}
-			log.Printf("%s", strings.Join(parts, " | "))
+
+			// Route message to appropriate device
+			if err := s.ship.HandleMessage(devMsg); err != nil {
+				log.Printf("Error handling message: %v", err)
+			}
 		}
 	}
 

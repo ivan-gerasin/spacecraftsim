@@ -29,6 +29,19 @@
             "problemMatcher": [
                 "$go"
             ]
-        }
+        },
+        {
+            "label": "Build and Run Client in CLI mode",
+            "type": "shell",
+            "command": "go run tools/client/cmd/main.go --cli",
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            },
+            "problemMatcher": [
+                "$go"
+            ]
+        }        
     ]
 } 

@@ -1,6 +1,8 @@
 package core
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"net"
 	"time"
@@ -8,7 +10,8 @@ import (
 
 // Connection represents a TCP connection to the server
 type Connection struct {
-	conn net.Conn
+	conn           net.Conn
+	messageHandler func(Message)
 }
 
 // NewConnection creates a new connection to the server
@@ -18,7 +21,42 @@ func NewConnection(address string) (*Connection, error) {
 		return nil, fmt.Errorf("failed to connect to server: %w", err)
 	}
 
-	return &Connection{conn: conn}, nil
+	c := &Connection{conn: conn}
+	go c.readMessages()
+	return c, nil
+}
+
+// SetMessageHandler sets the handler for incoming messages
+func (c *Connection) SetMessageHandler(handler func(Message)) {
+	c.messageHandler = handler
+}
+
+// SendMessage sends a message to the server
+func (c *Connection) SendMessage(msg Message) error {
+	data, err := json.Marshal([]Message{msg})
+	if err != nil {
+		return fmt.Errorf("failed to marshal message: %w", err)
+	}
+	if _, err := fmt.Fprintln(c.conn, string(data)); err != nil {
+		return fmt.Errorf("failed to write message: %w", err)
+	}
+	return nil
+}
+
+// readMessages reads messages from the connection
+func (c *Connection) readMessages() {
+	scanner := bufio.NewScanner(c.conn)
+	for scanner.Scan() {
+		var messages []Message
+		if err := json.Unmarshal(scanner.Bytes(), &messages); err != nil {
+			continue // Skip invalid messages
+		}
+		for _, msg := range messages {
+			if c.messageHandler != nil {
+				c.messageHandler(msg)
+			}
+		}
+	}
 }
 
 // Write writes data to the connection

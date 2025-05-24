@@ -57,3 +57,8 @@ func (l *Logger) LogSuccess(format string, args ...interface{}) {
 func (l *Logger) LogError(format string, args ...interface{}) {
 	l.Log(LevelError, format, args...)
 }
+
+// SetOutput sets the output writer for the logger
+func (l *Logger) SetOutput(writer io.Writer) {
+	l.writer = writer
+}

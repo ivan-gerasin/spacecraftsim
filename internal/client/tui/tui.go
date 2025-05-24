@@ -80,7 +80,7 @@ func (ui *UI) setupLayout() {
 	// Create a form for controls
 	form := tview.NewForm()
 	for _, control := range ui.controls {
-		form.AddFormItem(control.GetPrimitive())
+		form.AddFormItem(control.GetFormItem())
 	}
 
 	// Set up grid layout
@@ -98,12 +98,12 @@ func (ui *UI) setupLayout() {
 func (ui *UI) handleControlChange(id, value string) {
 	msg := core.Message{
 		ID:     id,
-		Values: []string{value},
+		Values: []interface{}{value},
 	}
 	if err := ui.conn.SendMessage(msg); err != nil {
-		ui.logger.Log("Error", fmt.Sprintf("Failed to send message: %v", err))
+		ui.logger.Log(core.LevelError, fmt.Sprintf("Failed to send message: %v", err))
 	} else {
-		ui.logger.Log("Info", fmt.Sprintf("Sent: %s = %s", id, value))
+		ui.logger.Log(core.LevelInfo, fmt.Sprintf("Sent: %s = %s", id, value))
 	}
 }
 
@@ -115,11 +115,13 @@ func (ui *UI) Run() error {
 		for _, control := range ui.controls {
 			if control.GetID() == msg.ID && len(msg.Values) > 0 {
 				ui.app.QueueUpdateDraw(func() {
-					control.SetValue(msg.Values[0])
+					if strValue, ok := msg.Values[0].(string); ok {
+						control.SetValue(strValue)
+					}
 				})
 			}
 		}
-		ui.logger.Log("Received", fmt.Sprintf("%s = %v", msg.ID, msg.Values))
+		ui.logger.Log(core.LevelInfo, fmt.Sprintf("%s = %v", msg.ID, msg.Values))
 	})
 
 	// Start the application

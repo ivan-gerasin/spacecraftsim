@@ -12,12 +12,12 @@ type Control interface {
 	GetID() string
 	// GetLabel returns the display label
 	GetLabel() string
-	// GetPrimitive returns the tview primitive
-	GetPrimitive() tview.Primitive
 	// GetValue returns the current value
 	GetValue() string
 	// SetValue sets the current value
 	SetValue(value string)
+	// GetFormItem returns the tview form item
+	GetFormItem() tview.FormItem
 }
 
 // BaseControl provides common functionality for controls
@@ -46,9 +46,9 @@ func NewCheckboxControl(id, label string, onChange func(checked bool)) *Checkbox
 	return c
 }
 
-func (c *CheckboxControl) GetPrimitive() tview.Primitive { return c.checkbox }
-func (c *CheckboxControl) GetValue() string              { return fmt.Sprintf("%v", c.checkbox.IsChecked()) }
-func (c *CheckboxControl) SetValue(value string)         { c.checkbox.SetChecked(value == "true") }
+func (c *CheckboxControl) GetValue() string            { return fmt.Sprintf("%v", c.checkbox.IsChecked()) }
+func (c *CheckboxControl) SetValue(value string)       { c.checkbox.SetChecked(value == "true") }
+func (c *CheckboxControl) GetFormItem() tview.FormItem { return c.checkbox }
 
 // SelectorControl implements a dropdown control
 type SelectorControl struct {
@@ -69,7 +69,6 @@ func NewSelectorControl(id, label string, options []string, onChange func(option
 	return c
 }
 
-func (c *SelectorControl) GetPrimitive() tview.Primitive { return c.dropdown }
 func (c *SelectorControl) GetValue() string {
 	_, value := c.dropdown.GetCurrentOption()
 	return value
@@ -82,6 +81,7 @@ func (c *SelectorControl) SetValue(value string) {
 		}
 	}
 }
+func (c *SelectorControl) GetFormItem() tview.FormItem { return c.dropdown }
 
 // InputControl implements an input field control
 type InputControl struct {
@@ -100,6 +100,6 @@ func NewInputControl(id, label string, onChange func(text string)) *InputControl
 	return c
 }
 
-func (c *InputControl) GetPrimitive() tview.Primitive { return c.input }
-func (c *InputControl) GetValue() string              { return c.input.GetText() }
-func (c *InputControl) SetValue(value string)         { c.input.SetText(value) }
+func (c *InputControl) GetValue() string            { return c.input.GetText() }
+func (c *InputControl) SetValue(value string)       { c.input.SetText(value) }
+func (c *InputControl) GetFormItem() tview.FormItem { return c.input }

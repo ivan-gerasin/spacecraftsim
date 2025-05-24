@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -96,7 +97,14 @@ func NewInputControl(id, label string, onChange func(text string)) *InputControl
 		onChange:    onChange,
 	}
 	c.input = tview.NewInputField().SetLabel(label)
-	c.input.SetChangedFunc(onChange)
+
+	// Set up input field to only trigger on Enter
+	c.input.SetDoneFunc(func(key tcell.Key) {
+		if key == tcell.KeyEnter {
+			onChange(c.input.GetText())
+		}
+	})
+
 	return c
 }
 

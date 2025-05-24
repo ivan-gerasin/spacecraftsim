@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"spacecraftsim/internal/client/core"
 
@@ -33,6 +34,7 @@ func New(conn *core.Connection, logger *core.Logger) *UI {
 	config, err := LoadConfig("devices.yaml")
 	if err != nil {
 		log.Printf("Warning: Failed to load device config: %v", err)
+		os.Exit(1)
 		config = &Config{} // Use empty config as fallback
 	}
 
@@ -48,26 +50,28 @@ func New(conn *core.Connection, logger *core.Logger) *UI {
 // createControls creates UI controls from configuration
 func (ui *UI) createControls(config *Config) {
 	for _, dev := range config.Devices {
+		// Create a new variable for each iteration to avoid closure issues
+		device := dev
 		var control Control
 
-		switch dev.Type {
+		switch device.Type {
 		case TypeCheckbox:
-			control = NewCheckboxControl(dev.ID, dev.Label, func(checked bool) {
-				ui.handleControlChange(dev.ID, fmt.Sprintf("%v", checked))
+			control = NewCheckboxControl(device.ID, device.Label, func(checked bool) {
+				ui.handleControlChange(device.ID, fmt.Sprintf("%v", checked))
 			})
 
 		case TypeSelector:
-			control = NewSelectorControl(dev.ID, dev.Label, dev.Options, func(option string, index int) {
-				ui.handleControlChange(dev.ID, option)
+			control = NewSelectorControl(device.ID, device.Label, device.Options, func(option string, index int) {
+				ui.handleControlChange(device.ID, option)
 			})
 
 		case TypeInput:
-			control = NewInputControl(dev.ID, dev.Label, func(text string) {
-				ui.handleControlChange(dev.ID, text)
+			control = NewInputControl(device.ID, device.Label, func(text string) {
+				ui.handleControlChange(device.ID, text)
 			})
 
 		default:
-			log.Printf("Warning: Unknown device type %s for device %s", dev.Type, dev.ID)
+			log.Printf("Warning: Unknown device type %s for device %s", device.Type, device.ID)
 			continue
 		}
 

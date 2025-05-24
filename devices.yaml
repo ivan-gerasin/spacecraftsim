@@ -1,4 +1,8 @@
 devices:
+  - id: target_temp
+    label: "Target Temperature"
+    type: input 
+
   - id: power_switch
     label: "Main Power"
     type: checkbox
@@ -8,6 +12,3 @@ devices:
     type: selector
     options: ["Manual", "Auto", "Test"]
 
-  - id: target_temp
-    label: "Target Temperature"
-    type: input 
